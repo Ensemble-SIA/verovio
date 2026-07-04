@@ -3166,11 +3166,40 @@ void MusicXmlInput::ReadMusicXmlNote(
                 note->SetOct(octaveNum);
             }
 
+            // Sounding pitch: the <pitch> element is authoritative (MusicXML
+            // pitch IS step/alter/octave; <alter> absent means no chromatic
+            // alteration). It supplies the gestural accidental below instead of
+            // the carried-over written-accidental synthesis; the written glyph
+            // (@accid) is never modified.
+            bool hasAlterGes = true;
+            data_ACCIDENTAL_GESTURAL alterGes = ACCIDENTAL_GESTURAL_n;
+            const pugi::xml_node alterNode = pitch.child("alter");
+            if (alterNode) {
+                const float alterVal = alterNode.text().as_float();
+                alterGes = ACCIDENTAL_GESTURAL_NONE;
+                if (alterVal == -2.0) alterGes = ACCIDENTAL_GESTURAL_ff;
+                if (alterVal == -1.0) alterGes = ACCIDENTAL_GESTURAL_f;
+                if (alterVal == 0.0) alterGes = ACCIDENTAL_GESTURAL_n;
+                if (alterVal == 1.0) alterGes = ACCIDENTAL_GESTURAL_s;
+                if (alterVal == 2.0) alterGes = ACCIDENTAL_GESTURAL_ss;
+                if (alterGes == ACCIDENTAL_GESTURAL_NONE) {
+                    hasAlterGes = false;
+                    LogWarning("MusicXML import: <alter> value '%s' not supported, ignored",
+                        alterNode.text().as_string());
+                }
+            }
+
             // adjust accidental (including glyph) based on carried-over accidentals
             // or update the carried-over accidentals with current accidental value.
             if (note->HasPname()) {
                 ListOfObjects accids = note->FindAllDescendantsByType(ACCID);
-                if (!accids.size()) {
+                if (!accids.size() && hasAlterGes) {
+                    Accid *accid = new Accid();
+                    note->AddChild(accid);
+                    accid->IsAttribute(false);
+                    accid->SetAccidGes(alterGes);
+                }
+                else if (!accids.size()) {
                     try {
                         for (const auto &current : m_currentAccids.at(note->GetPname())) {
                             Accid *accid = new Accid();
@@ -3201,7 +3230,8 @@ void MusicXmlInput::ReadMusicXmlNote(
                     m_currentAccids[note->GetPname()].clear();
                     for (Object *object : accids) {
                         Accid *accid = vrv_cast<Accid *>(object);
-                        accid->SetAccidGes(Att::AccidentalWrittenToGestural(accid->GetAccid()));
+                        accid->SetAccidGes(
+                            hasAlterGes ? alterGes : Att::AccidentalWrittenToGestural(accid->GetAccid()));
                         m_currentAccids[note->GetPname()].push_back(
                             musicxml::Accidental(accid->GetAccid(), accid->GetGlyphName(), accid->GetGlyphAuth()));
                     }
