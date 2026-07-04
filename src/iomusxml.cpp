@@ -2383,6 +2383,13 @@ void MusicXmlInput::ReadMusicXmlDirection(
         }
         else {
             Dir *dir = new Dir();
+            // As for Dynam: id from the first contributing child carrying one
+            for (const pugi::xpath_node &child : words) {
+                if (child.node().attribute("id")) {
+                    dir->SetID(child.node().attribute("id").as_string());
+                    break;
+                }
+            }
             if (words.size() == 1) {
                 dir->SetLang(words.first().node().attribute("xml:lang").as_string());
             }
@@ -2453,6 +2460,15 @@ void MusicXmlInput::ReadMusicXmlDirection(
         dynamics.sort();
 
         Dynam *dynam = new Dynam();
+        // Take the id from the first contributing child that carries one; the
+        // <direction> container id would collide across the several control
+        // events a single direction fans into
+        for (const pugi::xpath_node &child : dynamics) {
+            if (child.node().attribute("id")) {
+                dynam->SetID(child.node().attribute("id").as_string());
+                break;
+            }
+        }
         dynam->SetPlace(dynam->AttPlacementRelStaff::StrToStaffrel(placeStr.c_str()));
         dynam->SetTstamp(timeStamp);
         if (staffNode) {
