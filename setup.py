@@ -4,6 +4,7 @@
 
 from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext as _build_ext
+from setuptools.command.build_py import build_py as _build_py
 from setuptools.command.sdist import sdist as _sdist
 from glob import glob
 import platform
@@ -27,6 +28,22 @@ class sdist(_sdist):
         # generate the git commit include file
         get_commit()
         _sdist.run(self)
+
+
+class build_py(_build_py):
+    """Run build_ext (and therefore SWIG) before collecting package files.
+
+    The default build order runs build_py before build_ext, so on a bare
+    source build (pip install from a git URL or an un-preprocessed sdist)
+    the SWIG-generated proxy bindings/python/verovio.py does not exist yet
+    when build_py collects the 'verovio' package; the installed package
+    then fails on 'from .verovio import *'. The cibuildwheel pipeline
+    avoids this only via swig in CIBW_BEFORE_BUILD. Building the extension
+    first makes the bare source build self-contained."""
+
+    def run(self):
+        self.run_command('build_ext')
+        _build_py.run(self)
 
 
 def get_commit():
@@ -124,7 +141,7 @@ verovio_module = Extension('verovio._verovio',
 
 setup(name='verovio',
       version=get_version(),
-      cmdclass={'sdist': sdist, 'build_ext': build_ext},
+      cmdclass={'sdist': sdist, 'build_ext': build_ext, 'build_py': build_py},
       url="https://www.verovio.org",
       description="""A library and toolkit for engraving MEI music notation into SVG""",
       long_description=get_readme(),
