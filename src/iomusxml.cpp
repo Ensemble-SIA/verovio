@@ -2289,6 +2289,7 @@ void MusicXmlInput::ReadMusicXmlDirection(
         }
         else {
             BracketSpan *bracketSpan = new BracketSpan();
+            if (bracket.attribute("id")) bracketSpan->SetID(bracket.attribute("id").as_string());
             musicxml::OpenSpanner openBracket(voiceNumber, m_measureCounts.at(measure));
             bracketSpan->SetColor(bracket.attribute("color").as_string());
             bracketSpan->SetLform(
@@ -2650,6 +2651,7 @@ void MusicXmlInput::ReadMusicXmlDirection(
         }
         else {
             Octave *octave = new Octave();
+            if (xmlShift.attribute("id")) octave->SetID(xmlShift.attribute("id").as_string());
             octave->SetColor(xmlShift.attribute("color").as_string());
             octave->SetDisPlace(octave->AttOctaveDisplacement::StrToStaffrelBasic(placeStr.c_str()));
             octave->SetN(xmlShift.attribute("number").as_string());
@@ -2675,6 +2677,7 @@ void MusicXmlInput::ReadMusicXmlDirection(
         bool pedalLine = xmlPedal.attribute("line").as_bool();
         if (pedalType != "continue") {
             Pedal *pedal = new Pedal();
+            if (xmlPedal.attribute("id")) pedal->SetID(xmlPedal.attribute("id").as_string());
             pedal->SetColor(xmlPedal.attribute("color").as_string());
             // pedal->SetN(xmlPedal.attribute("number").as_string());
             if (!placeStr.empty()) pedal->SetPlace(pedal->AttPlacementRelStaff::StrToStaffrel(placeStr.c_str()));
@@ -2730,6 +2733,7 @@ void MusicXmlInput::ReadMusicXmlDirection(
         else {
             // std::string symbol = lead.node().attribute("symbol").as_string();
             BracketSpan *bracketSpan = new BracketSpan();
+            if (lead.attribute("id")) bracketSpan->SetID(lead.attribute("id").as_string());
             musicxml::OpenSpanner openBracket(voiceNumber, m_measureCounts.at(measure));
             bracketSpan->SetColor(lead.attribute("color").as_string());
             // bracketSpan->SetPlace(bracketSpan->AttPlacementRelStaff::StrToStaffrel(placeStr.c_str()));
@@ -2746,6 +2750,7 @@ void MusicXmlInput::ReadMusicXmlDirection(
     pugi::xml_node rehearsal = typeNode.child("rehearsal");
     if (rehearsal) {
         Reh *reh = new Reh();
+        if (rehearsal.attribute("id")) reh->SetID(rehearsal.attribute("id").as_string());
         reh->SetPlace(reh->AttPlacementRelStaff::StrToStaffrel(placeStr.c_str()));
         const std::string halign = rehearsal.attribute("halign").as_string();
         const std::string lang = rehearsal.attribute("xml:lang") ? rehearsal.attribute("xml:lang").as_string() : "it";
@@ -2780,6 +2785,13 @@ void MusicXmlInput::ReadMusicXmlDirection(
         if (words.size() != 0) TextRendition(words, tempo);
         pugi::xpath_node metronome = node.select_node("direction-type/metronome[not(@print-object='no')]");
         if (metronome) PrintMetronome(metronome.node(), tempo);
+        // id from the first contributing child carrying one (cf. Dynam/Dir)
+        if (metronome && metronome.node().attribute("id")) {
+            tempo->SetID(metronome.node().attribute("id").as_string());
+        }
+        else if (!words.empty() && words.first().node().attribute("id")) {
+            tempo->SetID(words.first().node().attribute("id").as_string());
+        }
         if (soundNode.attribute("tempo")) {
             tempo->SetMidiBpm(soundNode.attribute("tempo").as_double());
         }
@@ -3938,6 +3950,8 @@ void MusicXmlInput::ReadMusicXmlNote(
         }
         if (!added) {
             Arpeg *arpeggio = new Arpeg();
+            if (xmlArpeggiate.node().attribute("id"))
+                arpeggio->SetID(xmlArpeggiate.node().attribute("id").as_string());
             arpeggio->GetPlistInterface()->AddRef("#" + element->GetID());
             // color
             arpeggio->SetColor(xmlArpeggiate.node().attribute("color").as_string());
