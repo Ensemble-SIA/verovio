@@ -2028,9 +2028,14 @@ void MusicXmlInput::MatchTies(bool matchLayers)
         std::vector<musicxml::CloseTie>::iterator jter;
         for (jter = m_tieStopStack.begin(); jter != m_tieStopStack.end(); ++jter) {
             // match tie stop with pitch/oct identity, with start note earlier than end note,
-            // and with earliest end note.
+            // and with earliest end note. A grace note precedes its host at the
+            // SAME score time onset (zero duration), so a grace-to-main tie is
+            // matched on onset equality; the strictly-earlier rule alone refused
+            // every tie out of a grace chord (drawn as a dangling stub).
+            const bool graceToMain = iter->m_note->IsGraceNote() && !jter->m_note->IsGraceNote()
+                && (iter->m_note->GetScoreTimeOnset() == jter->m_note->GetScoreTimeOnset());
             if ((iter->m_note->IsEnharmonicWith(jter->m_note))
-                && (iter->m_note->GetScoreTimeOnset() < jter->m_note->GetScoreTimeOnset())
+                && ((iter->m_note->GetScoreTimeOnset() < jter->m_note->GetScoreTimeOnset()) || graceToMain)
                 && (!matchLayers || (iter->m_layerNum == jter->m_layerNum))) {
                 iter->m_tie->SetEndid("#" + jter->m_note->GetID());
                 tieMatched = true;
