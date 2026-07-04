@@ -1165,7 +1165,10 @@ std::pair<int, bool> LayerElement::CalcElementHorizontalOverlap(const Doc *doc,
                     else if ((currentNote->GetDrawingDur() > DURATION_2) && (previousDuration > DURATION_2)) {
                         isInUnison = true;
                     }
-                    if (isInUnison && (currentNote->GetDots() == previousNote->GetDots())) {
+                    // A true unison fuses regardless of dot count (one head,
+                    // two stems, the dotted voice's dot beside) - the engraver's
+                    // double-stem; unequal dots previously forced spread heads.
+                    if (isInUnison) {
                         continue;
                     }
                     else {
