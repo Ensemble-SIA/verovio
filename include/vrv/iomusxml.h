@@ -650,6 +650,11 @@ private:
     /* To remember current layer to properly handle layers/staves/cross-staff elements */
     Layer *m_currentLayer = NULL;
     bool m_isLayerInitialized = false;
+    /* Within a measure a voice maps to a single (staff, layer); cross-staff notes
+       carry @staff and must not re-home the voice. Remembering the layer a voice
+       was first placed in keeps a <backup> between cross-staff notes from
+       fracturing a beamed group across layers. Cleared at every measure. */
+    std::map<short int, Layer *> m_layerForVoice;
     /* The stack for open slurs */
     std::vector<std::pair<Slur *, musicxml::OpenSlur>> m_slurStack;
     /* The stack for slur stops that might come before the slur has been opened */

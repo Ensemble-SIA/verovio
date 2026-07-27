@@ -471,11 +471,25 @@ Layer *MusicXmlInput::SelectLayer(pugi::xml_node node, Measure *measure)
         layerNum = 1;
     }
 
+    // A voice maps to a single (staff, layer) for the whole measure. Once this
+    // voice has been placed, reuse that layer: a <backup> between cross-staff
+    // notes clears m_isLayerInitialized, and honoring each note's own <staff>
+    // here would re-home mid-voice, fracturing a beamed run across layers (the
+    // beam then loses its members and overruns the notes that follow). Cross-staff
+    // is expressed with @staff on the note, not by moving it to another layer.
+    const auto cached = m_layerForVoice.find(layerNum);
+    if (cached != m_layerForVoice.end()) {
+        m_currentLayer = cached->second;
+        m_isLayerInitialized = true;
+        return m_currentLayer;
+    }
+
     // If not initialized and layer is not set - get first layer in the first staff
     if (!m_currentLayer) {
         Staff *staff = vrv_cast<Staff *>(measure->GetChild(0, STAFF));
         assert(staff);
         m_currentLayer = SelectLayer(layerNum, staff);
+        m_layerForVoice[layerNum] = m_currentLayer;
         m_isLayerInitialized = true;
         return m_currentLayer;
     }
@@ -491,6 +505,7 @@ Layer *MusicXmlInput::SelectLayer(pugi::xml_node node, Measure *measure)
     assert(staff);
     m_currentLayer = SelectLayer(layerNum, staff);
 
+    m_layerForVoice[layerNum] = m_currentLayer;
     m_isLayerInitialized = true;
     return m_currentLayer;
 }
@@ -2015,6 +2030,7 @@ bool MusicXmlInput::ReadMusicXmlMeasure(
     // clear current layer
     m_isLayerInitialized = false;
     m_currentLayer = NULL;
+    m_layerForVoice.clear();
 
     return true;
 }
