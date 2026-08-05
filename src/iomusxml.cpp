@@ -592,26 +592,53 @@ void MusicXmlInput::FillSpace(Layer *layer, int dur, bool withClefs, int offset)
         }
     }
 
-    std::string durStr;
-    while (dur > 0) {
-        double quarters = (double)dur / (double)m_ppq;
-        quarters = pow(2, floor(log(quarters) / log(2)));
-        // limit space for now
-        if (quarters > 2) quarters = 2;
-        durStr = std::to_string(int(4 / quarters));
+    // The gap is measured in exact integer units of 1/256 of a division. The shortest
+    // notatable duration is a 1024th - 1/256 of a quarter, i.e. m_ppq units - so every
+    // space we can emit is a whole number of units even when it is a fraction of a
+    // division, and the subtraction never manufactures a residue the document never had.
+    // (It did: `dur -= m_ppq * quarters` truncated an int against a double, and the
+    // leftover was spelled "2048"/"4096", strings no MEI duration vocabulary holds. The
+    // reader refused them, the space kept DURATION_NONE, and DurationInterface aligned it
+    // as a quarter - a whole voice drawn a beat out of place, silently.)
+    const int unitsPerDivision = 256;
+    const int shortestDur = 1024;
+    const int longestDur = 2; // a half note - the same "limit space for now" cap
+    int remaining = dur * unitsPerDivision;
+    int offsetUnits = offset * unitsPerDivision;
+
+    while (remaining >= m_ppq) {
+        int spaceUnits = m_ppq;
+        int spaceDur = shortestDur;
+        while ((spaceDur > longestDur) && (2 * spaceUnits <= remaining)) {
+            spaceUnits *= 2;
+            spaceDur /= 2;
+        }
 
         Space *space = new Space();
-        space->SetDur(space->AttDurationLog::StrToDuration(durStr));
-        space->SetDurPpq(m_ppq * quarters);
+        space->SetDur(space->AttDurationLog::StrToDuration(std::to_string(spaceDur)));
+        // @dur.ppq is a whole number of divisions or it is not written at all - never a truncation
+        if (spaceUnits % unitsPerDivision == 0) space->SetDurPpq(spaceUnits / unitsPerDivision);
         if (m_elementStackMap.at(layer).empty()) {
             layer->AddChild(space);
         }
         else {
             m_elementStackMap.at(layer).back()->AddChild(space);
         }
-        dur -= m_ppq * quarters;
-        offset += m_ppq * quarters;
-        m_layerTimes[layer].emplace(offset, space);
+        remaining -= spaceUnits;
+        offsetUnits += spaceUnits;
+        m_layerTimes[layer].emplace(offsetUnits / unitsPerDivision, space);
+    }
+
+    if (remaining > 0) {
+        // The document asks for a gap shorter than the notation can spell. A space carrying an
+        // unspellable @dur draws as a quarter and displaces the whole voice, so none is emitted
+        // and the defect is named instead.
+        const Staff *staff = vrv_cast<const Staff *>(layer->GetFirstAncestor(STAFF));
+        const Measure *measure = vrv_cast<const Measure *>(layer->GetFirstAncestor(MEASURE));
+        assert(staff && measure);
+        LogError("MusicXML import: unnotatable gap in measure %s staff %d layer %d: residue %d/%d divisions "
+                 "(ppq %d) is shorter than the shortest notatable duration; no space emitted",
+            measure->GetN().c_str(), staff->GetN(), layer->GetN(), remaining, unitsPerDivision, m_ppq);
     }
 }
 
