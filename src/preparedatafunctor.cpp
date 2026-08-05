@@ -946,7 +946,12 @@ FunctorCode PreparePedalsFunctor::VisitMeasureEnd(Measure *measure)
             ++iter;
             continue;
         }
-        PedalIter up = std::find_if(m_pedalLines.begin(), m_pedalLines.end(), [&iter](Pedal *pedal) {
+        // The lift closing a pedal is the first one on the same staff that FOLLOWS it. Searching
+        // from the front of the list let a down take a lift encoded before it: one unmatched lift
+        // (an unbalanced source, or a lift the importer read on another staff) then paired every
+        // later down with the previous span's lift, so each pedal ended before it started and was
+        // dropped for the rest of the piece.
+        PedalIter up = std::find_if(std::next(iter), m_pedalLines.end(), [&iter](Pedal *pedal) {
             return (((*iter)->GetStaff() == pedal->GetStaff()) && (pedal->GetDir() != pedalLog_DIR_down));
         });
         if (up != m_pedalLines.end()) {
