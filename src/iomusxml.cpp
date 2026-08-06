@@ -569,24 +569,37 @@ void MusicXmlInput::FillSpace(Layer *layer, int dur, bool withClefs, int offset)
 
     // Split spaces to take into account pending clef changes in that layer
     if (withClefs && !m_clefChangeQueue.empty()) {
+        const Object *gapMeasure = layer->GetFirstAncestor(MEASURE);
         std::list<int> durs;
         int processed = 0;
-        for (auto &clefChange : m_clefChangeQueue) {
+        for (const auto &clefChange : m_clefChangeQueue) {
             if (clefChange.m_layer != layer) continue;
-            if (clefChange.m_scoreOnset < dur) {
+            // The queue is drained once per DOCUMENT, so it holds every clef change the score has
+            // met so far, not the ones this measure wrote. A layer pointer alone does not say
+            // which: it is re-pointed as later notes claim their clefs, so an entry minted measures
+            // ago can end up naming the layer being filled here and dividing this gap at a position
+            // that belongs to another bar. Only a change the same measure wrote can divide it.
+            if (clefChange.m_staff->GetFirstAncestor(MEASURE) != gapMeasure) continue;
+            // A change at the very start of the gap divides nothing - there is no run of spaces
+            // before position zero - and neither does a second change on a position already used.
+            if ((clefChange.m_scoreOnset > processed) && (clefChange.m_scoreOnset < dur)) {
                 durs.push_back(clefChange.m_scoreOnset - processed);
                 processed = clefChange.m_scoreOnset;
             }
         }
-        if (processed > 0 && processed < dur) {
-            durs.push_back(dur - processed);
-        }
-        if (!durs.empty()) {
-            int processed = 0;
-            for (auto durList : durs) {
+        // The split says WHERE the run of spaces is broken, never HOW MUCH of the gap is filled:
+        // whatever the split points leave over is still owed, and it is emitted here. (It was not.
+        // A lone change at onset 0 built the list {0} - non-empty, so the tail was never appended -
+        // and the recursion below then returned having written nothing at all: the whole gap
+        // swallowed, the voice drawn at the bar start, and the loud arm at the end of this function
+        // never reached.)
+        if (processed < dur) durs.push_back(dur - processed);
+        if (durs.size() > 1) {
+            int filled = 0;
+            for (int durList : durs) {
                 // Call it recursively with split durations and the processed offset
-                this->FillSpace(layer, durList, false, processed);
-                processed += durList;
+                this->FillSpace(layer, durList, false, offset + filled);
+                filled += durList;
             }
             return;
         }
@@ -2979,10 +2992,13 @@ void MusicXmlInput::ReadMusicXmlNote(
 
     // If we just had a clef change, make sure it points to the correct layer
     if (m_clefChanged && !m_clefChangeQueue.empty()) {
-        size_t limit = std::min(size_t(m_clefChanged), m_clefChangeQueue.size());
-        auto endIt = m_clefChangeQueue.begin() + limit;
-        // Adjust all clefs in the queue
-        for (auto it = m_clefChangeQueue.begin(); it != endIt; ++it) {
+        const size_t limit = std::min(size_t(m_clefChanged), m_clefChangeQueue.size());
+        // m_clefChanged counts the changes this measure has just pushed, and a push appends, so
+        // they are the BACK of the queue. The queue is drained once per document, so its front
+        // holds the oldest change in the score: adjusting from begin() re-pointed a clef change
+        // from an earlier measure at this note's layer, and every later gap fill in that layer
+        // then consulted a position belonging to another bar.
+        for (auto it = m_clefChangeQueue.end() - limit; it != m_clefChangeQueue.end(); ++it) {
             it->m_layer = layer;
         }
     }
