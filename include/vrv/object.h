@@ -764,6 +764,15 @@ public:
 
     static void SeedID(uint32_t seed = 0);
 
+    /**
+     * Reserve the ids a source document claims, so that GenerateID never mints one of them.
+     * An importer installs source ids with SetID as it reads, which is always after ids have
+     * been generated for other objects - without this, a generated id can be the very string
+     * a later SetID installs, and the output carries the same id twice.
+     * The set is replaced, not merged: reserving is per document import.
+     */
+    static void ReserveIDs(const std::unordered_set<std::string> &ids);
+
     static std::string GenerateHashID();
 
     static uint32_t Hash(uint32_t number, bool reverse = false);
@@ -900,6 +909,11 @@ private:
      * XML id counter
      */
     static thread_local uint32_t s_xmlIDCounter;
+
+    /**
+     * The ids the source document claims - GenerateID skips them. See ReserveIDs.
+     */
+    static thread_local std::unordered_set<std::string> s_reservedIDs;
 };
 
 //----------------------------------------------------------------------------

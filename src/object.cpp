@@ -67,6 +67,7 @@ namespace vrv {
 
 thread_local unsigned long Object::s_objectCounter = 0;
 thread_local uint32_t Object::s_xmlIDCounter = 0;
+thread_local std::unordered_set<std::string> Object::s_reservedIDs;
 
 Object::Object() : BoundingBox()
 {
@@ -821,9 +822,13 @@ int Object::DeleteChildrenByComparison(Comparison *comparison)
 
 void Object::GenerateID()
 {
-    // A random letter from a-z
-    char letter = 'a' + (s_xmlIDCounter % 26);
-    m_id = letter + Object::GenerateHashID();
+    // Skip any id the source document claims for itself - GenerateHashID advances the
+    // counter on every call, so the next candidate is a different string.
+    do {
+        // A random letter from a-z
+        char letter = 'a' + (s_xmlIDCounter % 26);
+        m_id = letter + Object::GenerateHashID();
+    } while (s_reservedIDs.count(m_id));
 }
 
 void Object::ResetID()
@@ -1275,6 +1280,11 @@ void Object::SeedID(uint32_t seed)
         // Deterministic start ID
         s_xmlIDCounter = Object::Hash(seed);
     }
+}
+
+void Object::ReserveIDs(const std::unordered_set<std::string> &ids)
+{
+    s_reservedIDs = ids;
 }
 
 std::string Object::GenerateHashID()

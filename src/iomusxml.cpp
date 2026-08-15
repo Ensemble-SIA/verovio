@@ -13,6 +13,7 @@
 #include <numeric>
 #include <regex>
 #include <sstream>
+#include <unordered_set>
 
 //----------------------------------------------------------------------------
 
@@ -121,14 +122,39 @@ MusicXmlInput::~MusicXmlInput()
 
 #ifndef NO_MUSICXML_SUPPORT
 
+/**
+ * Collect every id the MusicXML document claims, from anywhere in the tree.
+ * MusicXML spells element ids as @id (optional-unique-id); @xml:id is collected too so
+ * that a document mixing both spellings reserves all of them.
+ */
+static void CollectSourceIDs(const pugi::xml_node node, std::unordered_set<std::string> &ids)
+{
+    for (pugi::xml_attribute attribute : node.attributes()) {
+        const std::string name = attribute.name();
+        if ((name != "id") && (name != "xml:id")) continue;
+        const std::string value = attribute.value();
+        if (!value.empty()) ids.insert(value);
+    }
+    for (pugi::xml_node child : node.children()) {
+        CollectSourceIDs(child, ids);
+    }
+}
+
 bool MusicXmlInput::Import(const std::string &musicxml)
 {
     try {
-        m_doc->Reset();
-        m_doc->SetType(Raw);
         pugi::xml_document xmlDoc;
         xmlDoc.load_string(musicxml.c_str());
         pugi::xml_node root = xmlDoc.first_child();
+        // Reserve the source ids before anything is constructed: the importer installs them
+        // with SetID as it reads, so an id generated earlier in the import can be the exact
+        // string a later SetID installs, and the output then carries it twice. Doc::Reset
+        // generates an id of its own, so the reservation precedes it.
+        std::unordered_set<std::string> sourceIDs;
+        CollectSourceIDs(root, sourceIDs);
+        Object::ReserveIDs(sourceIDs);
+        m_doc->Reset();
+        m_doc->SetType(Raw);
         return ReadMusicXml(root);
     }
     catch (char *str) {

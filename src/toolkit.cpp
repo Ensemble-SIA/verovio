@@ -531,6 +531,10 @@ bool Toolkit::LoadData(const std::string &data, bool resetLogBuffer)
 
     m_doc.m_expansionMap.Reset();
 
+    // No id reserved by a previous import may reach this one - an importer that reserves
+    // (MusicXML) replaces the set, and one that does not must start from an empty one.
+    Object::ReserveIDs({});
+
     if (m_options->m_xmlIdChecksum.GetValue()) {
         crcInit();
         unsigned int cr = crcFast((unsigned char *)data.c_str(), (int)data.size());
