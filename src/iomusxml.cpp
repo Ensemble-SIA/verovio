@@ -3298,7 +3298,10 @@ void MusicXmlInput::ReadMusicXmlNote(
 
                             Accid *accid = new Accid();
                             note->AddChild(accid);
-                            accid->SetAccidGes(Att::AccidentalWrittenToGestural(current.m_accid));
+                            // The <pitch> element is authoritative for the sounding
+                            // pitch: @accid.ges comes from <alter>, never from the
+                            // carried written glyph (which may contradict it).
+                            accid->SetAccidGes(ConvertAlterToAccid(alterVal));
                             accid->IsAttribute(true);
 
                             // Because gestural accidentals do not map 1:1 to written accidentals, we may be losing
@@ -3332,7 +3335,10 @@ void MusicXmlInput::ReadMusicXmlNote(
                     m_alterAccids[pitchAlter].clear();
                     for (Object *object : accids) {
                         Accid *accid = vrv_cast<Accid *>(object);
-                        data_ACCIDENTAL_GESTURAL ges = Att::AccidentalWrittenToGestural(accid->GetAccid());
+                        // The <pitch> element is authoritative for the sounding
+                        // pitch: @accid.ges comes from <alter> (absent = natural),
+                        // never re-derived from the written glyph.
+                        data_ACCIDENTAL_GESTURAL ges = ConvertAlterToAccid(alterVal);
                         if (Att::AccidentalGesturalToWritten(ges) != accid->GetAccid()) {
                             accid->SetAccidGes(ges);
                         }
