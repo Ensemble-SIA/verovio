@@ -44,6 +44,7 @@
 #include "tabdursym.h"
 #include "tabgrp.h"
 #include "text.h"
+#include "tie.h"
 #include "timestamp.h"
 #include "tuplet.h"
 #include "turn.h"
@@ -796,6 +797,23 @@ FunctorCode PrepareTimeSpanningFunctor::VisitMeasure(Measure *measure)
 FunctorCode PrepareTimeSpanningFunctor::VisitMeasureEnd(Measure *measure)
 {
     if (this->IsCollectingData()) {
+        // A tie the source attached to a SINGLE note, leading out of it into the barline of a
+        // repeated section (MusicXML start-then-stop on one note, musicxml.xsd:581), has no note
+        // partner by construction. Its endpoint is the right barline of the measure holding its
+        // start. Setting it here reaches the drawing side through paths that ALREADY exist:
+        // View::DrawControlElement reads an end on a right barline as SPANNING_START, and
+        // Tie::CalculateXPosition already draws that half-open curve to just inside the barline.
+        ListOfObjects openTies;
+        ClassIdComparison isTie(TIE);
+        measure->FindAllDescendantsByComparison(&openTies, &isTie);
+        for (Object *object : openTies) {
+            Tie *tie = vrv_cast<Tie *>(object);
+            assert(tie);
+            if (tie->GetDrawingOpenAtRight() && !tie->GetEnd()) {
+                tie->SetEnd(measure->GetRightBarLine());
+            }
+        }
+
         ListOfSpanningInterOwnerPairs::iterator iter = m_timeSpanningInterfaces.begin();
         while (iter != m_timeSpanningInterfaces.end()) {
             // At the end of the measure we remove elements for which we do not need to match the end (for now).

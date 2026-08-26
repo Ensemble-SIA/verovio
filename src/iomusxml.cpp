@@ -4459,10 +4459,37 @@ void MusicXmlInput::ReadMusicXmlTies(const pugi::xml_node &node, Layer *layer, N
             continue;
         }
         else if (tieType == "stop") { // add to stack if (endTie) or if pitch/oct match to open tie on m_tieStack
-            if (!m_tieStack.empty() && note->IsEnharmonicWith(m_tieStack.back().m_note)
-                && (m_tieStack.back().m_layerNum == layer->GetN())) {
-                m_tieStack.back().m_tie->SetEndid("#" + note->GetID());
-                m_tieStack.pop_back();
+            // A <tied type="stop"> NEVER closes a tie the SAME note opened. A tie joins two
+            // notes; a note is not tied to itself. MusicXML 4.0 gives start-then-stop on ONE
+            // note as the encoding of a tie visually attached to that single note - a tie
+            // leading into a repeated section (musicxml.xsd:581), the order fixed by the rule
+            // at musicxml.xsd:585 - so the stop here is the closing half of the ELEMENT PAIR,
+            // never a note partner. Walk past every self entry to the topmost other candidate,
+            // preserving the original "topmost candidate only" pairing rule.
+            int selfIndex = -1;
+            int partnerIndex = -1;
+            for (int i = (int)m_tieStack.size() - 1; i >= 0; --i) {
+                if (m_tieStack.at(i).m_note == note) {
+                    if (selfIndex < 0) selfIndex = i;
+                    continue;
+                }
+                partnerIndex = i;
+                break;
+            }
+            if ((partnerIndex >= 0) && note->IsEnharmonicWith(m_tieStack.at(partnerIndex).m_note)
+                && (m_tieStack.at(partnerIndex).m_layerNum == layer->GetN())) {
+                // A real open tie of the same pitch in the same layer is a partner the notation
+                // supplies: this is a tie-chain interior, whichever order the two <tied>
+                // elements were written in.
+                m_tieStack.at(partnerIndex).m_tie->SetEndid("#" + note->GetID());
+                m_tieStack.erase(m_tieStack.begin() + partnerIndex);
+            }
+            else if (selfIndex >= 0) {
+                // No partner, and this note opened a tie of its own: the single-ended tie of
+                // musicxml.xsd:581. It stays without an @endid - deliberately, not by defect -
+                // and is drawn to the right barline of its measure.
+                m_tieStack.at(selfIndex).m_tie->SetDrawingOpenAtRight(true);
+                m_tieStack.erase(m_tieStack.begin() + selfIndex);
             }
             else {
                 this->CloseTie(note, layer->GetN());

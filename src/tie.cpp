@@ -64,6 +64,8 @@ void Tie::Reset()
     TimeSpanningInterface::Reset();
     this->ResetCurvature();
     this->ResetLineRendBase();
+
+    m_drawingOpenAtRight = false;
 }
 
 bool Tie::AdjustEnharmonicTies(const Doc *doc, const FloatingCurvePositioner *curve, Point bezier[4],

@@ -65,6 +65,20 @@ public:
     }
     ///@}
 
+    /**
+     * @name Set/get the flag marking a tie the source attached to a SINGLE note,
+     * leading out of that note into the barline of a repeated section.
+     * MusicXML 4.0 encodes it as two <tied> elements on one note in the order
+     * start-then-stop (musicxml.xsd:581, order rule musicxml.xsd:585). Such a tie
+     * has no note partner by construction: its endpoint is the right barline of
+     * the measure holding its start, resolved in PrepareTimeSpanningFunctor.
+     * Drawing state only - never serialized to MEI.
+     */
+    ///@{
+    void SetDrawingOpenAtRight(bool openAtRight) { m_drawingOpenAtRight = openAtRight; }
+    bool GetDrawingOpenAtRight() const { return m_drawingOpenAtRight; }
+    ///@}
+
     virtual bool CalculatePosition(
         const Doc *doc, const Staff *staff, int x1, int x2, int spanningType, Point bezier[4]);
 
@@ -110,6 +124,8 @@ private:
 public:
     //
 private:
+    /** See SetDrawingOpenAtRight. Drawing state, reset with the object. */
+    bool m_drawingOpenAtRight;
 };
 
 } // namespace vrv
