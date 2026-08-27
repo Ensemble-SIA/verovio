@@ -305,6 +305,38 @@ void AdjustSlursFunctor::FilterSpannedElements(const BezierCurve &bezierCurve, i
                     ? (layerElement->GetOriginalLayerN() != m_currentSlur->GetEnd()->GetOriginalLayerN())
                     : true;
             }
+            // A slur whose two boundaries lie on different staves travels away from the staff it starts on.
+            // Material that stayed behind on that departed staff is an obstacle only while the curve is still
+            // there: once the departed staff's own vertical band no longer contains the curve at that horizontal
+            // position, the material left behind lies wholly on the far side of the curve, and treating it as an
+            // obstacle forces the curve to arch clear of a whole staff. Which side "far" is follows from the
+            // curve's own position, so the test holds for either curve direction. The staff the slur is heading
+            // to keeps all of its material, since the curve has yet to clear it.
+            else if (layerElement) {
+                const Staff *startStaff = m_currentSlur->GetStart()
+                    ? m_currentSlur->GetStart()->GetAncestorStaff(RESOLVE_CROSS_STAFF, false)
+                    : NULL;
+                const Staff *endStaff = m_currentSlur->GetEnd()
+                    ? m_currentSlur->GetEnd()->GetAncestorStaff(RESOLVE_CROSS_STAFF, false)
+                    : NULL;
+                const Staff *elementStaff = layerElement->GetAncestorStaff(RESOLVE_CROSS_STAFF, false);
+                if (startStaff && endStaff && elementStaff && (startStaff->GetN() != endStaff->GetN())
+                    && (elementStaff->GetN() == startStaff->GetN())) {
+                    Point points[4];
+                    points[0] = bezierCurve.p1;
+                    points[1] = bezierCurve.c1;
+                    points[2] = bezierCurve.c2;
+                    points[3] = bezierCurve.p2;
+                    const int curveY = BoundingBox::CalcBezierAtPosition(points, xMiddle);
+                    const int staffTop = elementStaff->GetDrawingY();
+                    const int staffBottom = staffTop
+                        - (elementStaff->m_drawingLines - 1) * 2
+                            * m_doc->GetDrawingUnit(elementStaff->m_drawingStaffSize);
+                    if ((curveY > staffTop) || (curveY < staffBottom)) {
+                        spannedElement->m_discarded = true;
+                    }
+                }
+            }
             // Ignore tuplet numbers
             if (layerElement && layerElement->Is(TUPLET_NUM)) {
                 spannedElement->m_discarded = true;
