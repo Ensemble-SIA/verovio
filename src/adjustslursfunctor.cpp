@@ -69,8 +69,14 @@ FunctorCode AdjustSlursFunctor::VisitStaffAlignment(StaffAlignment *staffAlignme
 
     this->ResetCurrent();
 
-    // Detection of inner slurs
-    std::map<FloatingCurvePositioner *, ArrayOfFloatingCurvePositioners> innerCurveMap;
+    // Detection of inner slurs.
+    // The outer→inner pairs are visited in the positioners' own (value-sorted) order.
+    // A std::map keyed on the positioner POINTER ordered them by heap address, and
+    // AdjustOuterSlur both writes an outer curve's control points and reads its inner
+    // curves' current points — so a curve that is at once a key and another key's
+    // inner curve got a different answer per allocation, and one document rendered
+    // two pages (ensemble VER-4, 2026-09-05: kreisleriana_3 p.2, 37/33 over 70 renders).
+    std::vector<std::pair<FloatingCurvePositioner *, ArrayOfFloatingCurvePositioners>> innerCurveMap;
     for (int i = 0; i < (int)positioners.size(); ++i) {
         Slur *firstSlur = vrv_cast<Slur *>(positioners[i]->GetObject());
         ArrayOfFloatingCurvePositioners innerCurves;
@@ -107,7 +113,7 @@ FunctorCode AdjustSlursFunctor::VisitStaffAlignment(StaffAlignment *staffAlignme
             }
         }
         if (!innerCurves.empty()) {
-            innerCurveMap[positioners[i]] = innerCurves;
+            innerCurveMap.emplace_back(positioners[i], innerCurves);
         }
     }
 
