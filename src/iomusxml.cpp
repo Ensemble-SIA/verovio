@@ -142,6 +142,23 @@ static void CollectSourceIDs(const pugi::xml_node node, std::unordered_set<std::
 
 bool MusicXmlInput::Import(const std::string &musicxml)
 {
+    // MUSICXML IMPORT IS DISABLED IN THIS BUILD (Ensemble, 2026-09-08). Every page
+    // Ensemble draws is engraved from the MEI its own emitter writes; the two
+    // operator roads that still handed MusicXML to this importer were deleted the
+    // same day, after three worker processes died inside ReadMusicXmlNote on a
+    // chord note whose layer held no element (upstream's chord-duration check
+    // reads the layer stack without the `.empty()` guard it uses six times
+    // elsewhere in that function, and FillSpace's no-space-emitted road leaves
+    // the stack empty). George at the verovio console: "I think I have to turn
+    // off your ability to use xml importer." The refusal stands BEFORE the parse
+    // so no byte of MusicXML reaches the reader; the toolkit's format dispatch is
+    // untouched, so a MusicXML document handed to it answers this one sentence
+    // and loadData returns false. The importer's body below is kept intact and
+    // unreachable, so a future decision to re-enable it is one deletion, here.
+    LogError("MusicXML import is disabled in this build; engrave from MEI");
+    (void)musicxml;
+    return false;
+
     try {
         pugi::xml_document xmlDoc;
         xmlDoc.load_string(musicxml.c_str());
