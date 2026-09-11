@@ -9,6 +9,10 @@
 
 //----------------------------------------------------------------------------
 
+#include <algorithm>
+
+//----------------------------------------------------------------------------
+
 #include "altsyminterface.h"
 #include "areaposinterface.h"
 #include "beamspan.h"
@@ -996,6 +1000,43 @@ FunctorCode PreparePedalsFunctor::VisitMeasureEnd(Measure *measure)
 {
     // Match down and up pedal lines
     using PedalIter = std::list<Pedal *>::iterator;
+
+    // A measure's control events stand in the document in ENCODING order, which is not TIME
+    // order: MEI states a <pedal>'s position by @tstamp / @startid and never by its position
+    // among the measure's children, and a MusicXML source writes a later staff/voice block's
+    // <direction> after an earlier block's - so a lift at beat 1.875 is legally encoded after
+    // a press at beat 2. The matching below reads the LIST and never a timestamp, so on such a
+    // measure it hands a press the lift encoded before it: the span then ends before it starts
+    // and is dropped (View::HasValidTimeSpanningOrder), or - where the two are merely swapped -
+    // it draws silently to the wrong lift. Put this measure's own pedal lines in time order
+    // here; the matching itself is unchanged.
+    PedalIter measureFirst = std::find_if(m_pedalLines.begin(), m_pedalLines.end(),
+        [measure](Pedal *pedal) { return (pedal->GetFirstAncestor(MEASURE) == measure); });
+    // @tstamp is the only position the two kinds of pedal share at this point in the pipeline.
+    // A @startid start resolves to a LayerElement whose onset is expressible only as a sum of
+    // GetAlignmentDuration() in whole-note units, and the meter unit that would put that sum on
+    // @tstamp's beat scale lives in Staff::m_drawingStaffDef, which Doc::ScoreDefSetCurrentDoc()
+    // fills only AFTER Doc::PrepareData() has run this functor (doc.cpp). So a measure holding a
+    // pedal line without @tstamp keeps its encoding order, exactly as before this ordering.
+    const bool everyPedalHasTstamp
+        = std::all_of(measureFirst, m_pedalLines.end(), [](Pedal *pedal) { return pedal->HasTstamp(); });
+    if (everyPedalHasTstamp) {
+        // Only this measure's lines move. A press still open from an earlier measure stays ahead
+        // of them, where the document put it, so a span crossing the barline still closes on the
+        // first lift of this measure.
+        std::list<Pedal *> inMeasure;
+        inMeasure.splice(inMeasure.end(), m_pedalLines, measureFirst, m_pedalLines.end());
+        // std::list::sort is stable, so encoding order is the final tiebreak. At one timestamp
+        // the lift comes first: a press meeting a pedal that is already down is a re-pedal, so
+        // the lift written at that same moment is the one closing the running span.
+        inMeasure.sort([](const Pedal *left, const Pedal *right) {
+            if (left->GetTstamp() < right->GetTstamp()) return true;
+            if (right->GetTstamp() < left->GetTstamp()) return false;
+            return ((left->GetDir() != pedalLog_DIR_down) && (right->GetDir() == pedalLog_DIR_down));
+        });
+        m_pedalLines.splice(m_pedalLines.end(), inMeasure);
+    }
+
     PedalIter iter = m_pedalLines.begin();
     while (iter != m_pedalLines.end()) {
         if ((*iter)->GetDir() != pedalLog_DIR_down) {
